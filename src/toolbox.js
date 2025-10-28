@@ -14,7 +14,7 @@ listed here.
 
 export const toolbox = {
   kind: 'categoryToolbox',
-  
+
   contents: [
     {
       kind: 'category',
@@ -628,9 +628,56 @@ export const toolbox = {
     },
     {
       kind: 'category',
-      name: 'Custom',
-      categorystyle: 'procedure_category',
-      custom: 'PROCEDURE',
+      name: 'Turtle',
+      colour: '#78b159',
+      contents: [
+        { kind: 'block', type: 'turtle_start' },
+        {
+          kind: 'block',
+          type: 'turtle_forward',
+          inputs: { STEPS: { shadow: { type: 'math_number', fields: { NUM: 50 } } } },
+        },
+        {
+          kind: 'block',
+          type: 'turtle_backward',
+          inputs: { STEPS: { shadow: { type: 'math_number', fields: { NUM: 50 } } } },
+        },
+        {
+          kind: 'block',
+          type: 'turtle_left',
+          inputs: { ANGLE: { shadow: { type: 'math_number', fields: { NUM: 90 } } } },
+        },
+        {
+          kind: 'block',
+          type: 'turtle_right',
+          inputs: { ANGLE: { shadow: { type: 'math_number', fields: { NUM: 90 } } } },
+        },
+        {
+          kind: 'block',
+          type: 'turtle_goto',
+          inputs: {
+            X: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+            Y: { shadow: { type: 'math_number', fields: { NUM: 0 } } },
+          },
+        },
+        {
+          kind: 'block',
+          type: 'turtle_setx',
+          inputs: { X: { shadow: { type: 'math_number', fields: { NUM: 100 } } } },
+        },
+        {
+          kind: 'block',
+          type: 'turtle_sety',
+          inputs: { Y: { shadow: { type: 'math_number', fields: { NUM: 100 } } } },
+        },
+        {
+          kind: 'block',
+          type: 'turtle_setheading',
+          inputs: { ANGLE: { shadow: { type: 'math_number', fields: { NUM: 270 } } } },
+        },
+        { kind: 'block', type: 'turtle_pendown' },
+        { kind: 'block', type: 'turtle_penup' },
+      ],
     },
   ],
 };
