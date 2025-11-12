@@ -327,6 +327,18 @@ export const toolbox = {
       contents: [
         {
           kind: 'block',
+          type: 'text_print',
+          inputs: {
+            TEXT: {
+              shadow: {
+                type: 'text',
+                fields: { TEXT: '' },
+              },
+            },
+          },
+        },
+        {
+          kind: 'block',
           type: 'text',
         },
         {
