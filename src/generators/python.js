@@ -1,6 +1,6 @@
 import { pythonGenerator } from 'blockly/python';
 
-const TURTLE_PREAMBLE = `import turtle \n\n`;
+const TURTLE_PREAMBLE = `import turtlejs as t\n\n`;
 
 export function generatePython(ws) {
     const body = pythonGenerator.workspaceToCode(ws);
