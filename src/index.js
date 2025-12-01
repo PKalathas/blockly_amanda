@@ -6,114 +6,154 @@
 
 import * as Blockly from 'blockly';
 import 'blockly/blocks';
-import { blocks } from './blocks/text';
 import { generatePython } from './generators/python';
+import './blocks/text';
 import { save, load } from './serialization';
 import { toolbox } from './toolbox';
 import './index.css';
 import './blocks/turtle';
 
-Blockly.common.defineBlocks(blocks);
+window.Blockly = Blockly;
+
+// Turtle implementation using Canvas
+function makeTurtle(canvas) {
+  const ctx = canvas.getContext('2d');
+  let x = canvas.width / 2;
+  let y = canvas.height / 2;
+  let heading = 0;
+  let pen = true;
+
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+
+  const rad = d => (d * Math.PI) / 180;
+
+  function moveTo(nx, ny) {
+    if (pen) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(nx, ny);
+      ctx.stroke();
+    }
+    x = nx; y = ny;
+  }
+
+  return {
+    forward(d)   { moveTo(x + d * Math.cos(rad(heading)), y - d * Math.sin(rad(heading))); },
+    backward(d)  { this.forward(-d); },
+    left(a)      { heading = (heading + a) % 360; },
+    right(a)     { heading = (heading - a) % 360; },
+    penup()      { pen = false; },
+    pendown()    { pen = true; },
+    goto(nx, ny) { moveTo(nx, ny); },
+    setx(nx)     { moveTo(nx, y); },
+    sety(ny)     { moveTo(x, ny); },
+    setheading(a){ heading = a; },
+    clear()      { ctx.clearRect(0, 0, canvas.width, canvas.height);
+                   // reset to center/orientation so next run is consistent
+                   x = canvas.width / 2; y = canvas.height / 2; heading = 0; }
+  };
+}
 
 window.addEventListener('DOMContentLoaded', () => {
+  const runBtn = document.getElementById('runBtn');
+  const clearBtn = document.getElementById('clearBtn');
   const codeDiv = document.querySelector('#generatedCode code');
   const consoleDiv = document.getElementById('console');
-  const runBtn = document.getElementById('runBtn');
-  const blocklyDiv = document.getElementById('blocklyDiv');
+  const statusEl = document.getElementById('status');
+  const turtleCanvas = document.getElementById('turtleCanvas');
 
-  if (!codeDiv || !consoleDiv || !runBtn || !blocklyDiv) {
-    console.error('Missing DOM nodes: #generatedCode code, #console, #runBtn, #blocklyDiv');
+  if (!runBtn || !codeDiv || !consoleDiv || !turtleCanvas) {
+    console.error('Missing essential DOM nodes');
     return;
   }
 
-  const ws = Blockly.inject(blocklyDiv, { toolbox, autoCloseFlyout: false });
+  // prevent early DropDownDiv crash
+  if (Blockly.DropDownDiv?.createDom) Blockly.DropDownDiv.createDom();
 
-  function waitForSkulpt() {
-    return new Promise((resolve) => {
-      if (window.Sk) return resolve(window.Sk);
-      const iv = setInterval(() => {
-        if (window.Sk) {
-          clearInterval(iv);
-          resolve(window.Sk);
-        }
-      }, 50);
-    });
-  }
+  // workspace
+  const ws = Blockly.inject('blocklyDiv', {
+    toolbox,
+    grid: { spacing: 20, length: 3, colour: '#eee', snap: true },
+    zoom: { controls: true, wheel: true },
+    trashcan: true,
+  });
 
-  // --- run generated Python ---
-  async function runCode(pyCode) {
-    const Sk = await waitForSkulpt();
+  load(ws);
 
-    // clear console & show a quick status
-    consoleDiv.textContent = '▶ running…\n';
-
-    if (!Sk.builtinFiles || !Sk.builtinFiles.files) {
-      consoleDiv.textContent += 'Skulpt stdlib not loaded.\n';
-      return;
-    }
-
-    Sk.configure({
-      output: (text) => {
-        consoleDiv.append(document.createTextNode(text));
-        consoleDiv.scrollTop = consoleDiv.scrollHeight;
-      },
-      read: (name) => {
-        const f = Sk.builtinFiles.files[name];
-        if (f === undefined) throw new Error('File not found: ' + name);
-        return f;
-      },
-      inputfunTakesPrompt: true,
-      inputfun: (prompt) =>
-        new Promise((resolve) => resolve(window.prompt(prompt || '') ?? '')),
-      sysargv: ['skulpt'],
-      execLimit: 0,
-    });
-
-    try {
-      consoleDiv.textContent = '';
-      await Sk.misceval.asyncToPromise(() =>
-        Sk.importMainWithBody('<stdin>', false, pyCode, true)
-      );
-    } catch (err) {
-      consoleDiv.append(document.createTextNode('\n' + err.toString() + '\n'));
-    }
-
-    if (!consoleDiv.textContent.trim()) {
-      consoleDiv.textContent = '(no output)';
-    }
-  }
-
-  // keep top-left preview in sync
-  function updateCodePreview() {
+  function updatePreview() {
     const py = generatePython(ws);
     codeDiv.textContent = py;
     return py;
   }
+  updatePreview();
 
-  load(ws);
-  updateCodePreview();
-
-  ws.addChangeListener((e) => { if (!e.isUiEvent) save(ws); });
-
-  let debounce;
   ws.addChangeListener((e) => {
-    if (e.isUiEvent || e.type === Blockly.Events.FINISHED_LOADING || ws.isDragging()) return;
-    clearTimeout(debounce);
-    debounce = setTimeout(updateCodePreview, 120);
+    if (!e.isUiEvent) save(ws);
+    updatePreview();
   });
 
-  // run button
-  runBtn.type = 'button';
-  runBtn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    const py = updateCodePreview();
-    await runCode(py);
-  });
+  // console helpers
+  function clearConsole() { consoleDiv.textContent = ''; }
+  function write(text) {
+    consoleDiv.append(document.createTextNode(String(text)));
+    consoleDiv.scrollTop = consoleDiv.scrollHeight;
+  }
+  window._write = (s) => write(s);
 
-  window.addEventListener('keydown', async (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      const py = updateCodePreview();
-      await runCode(py);
+  const PY_PRELUDE = `
+import sys
+class _JSWriter:
+    def write(self, s):
+        import js
+        js._write(s)
+    def flush(self): pass
+sys.stdout = _JSWriter()
+sys.stderr = _JSWriter()
+`;
+
+  // Pyodide load + turtle setup
+  let pyodide = null;
+  let turtle = null;
+
+  runBtn.disabled = true;
+  if (statusEl) statusEl.textContent = 'Loading Pyodide…';
+
+  (async () => {
+    try {
+      pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.2/full/' });
+
+      // register turtle module
+      turtle = makeTurtle(turtleCanvas);
+      pyodide.registerJsModule('turtlejs', turtle);
+
+      runBtn.disabled = false;
+      runBtn.textContent = 'Run';
+      if (statusEl) statusEl.textContent = 'Pyodide loaded';
+    } catch (err) {
+      console.error(err);
+      runBtn.textContent = 'Load failed';
+      if (statusEl) statusEl.textContent = 'Pyodide failed to load';
+      consoleDiv.textContent = 'Pyodide failed to load.';
+    }
+  })();
+
+  // run button click
+  runBtn.addEventListener('click', async () => {
+    if (!pyodide) return;
+    clearConsole();
+    if (turtle) turtle.clear(); // clear canvas
+
+    const py = generatePython(ws);
+    const fullCode = PY_PRELUDE + '\n' + py;
+
+    try {
+      await pyodide.runPythonAsync(fullCode);
+      if (!consoleDiv.textContent.trim()) consoleDiv.textContent = '(no output)';
+    } catch (err) {
+      consoleDiv.append(document.createTextNode('\n' + String(err) + '\n'));
     }
   });
+
+  clearBtn.addEventListener('click', clearConsole);
 });
