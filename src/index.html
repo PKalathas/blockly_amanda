@@ -56,7 +56,16 @@
       #runBtn:active {
         transform: translateY(1px);
       }
+
       #clearBtn {
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: 1px solid #d1d5db;
+        background: #fff;
+        cursor: pointer;
+      }
+
+      #clearTurtleBtn {
         padding: 6px 12px;
         border-radius: 6px;
         border: 1px solid #d1d5db;
@@ -79,17 +88,26 @@
       }
 
       #turtlePane {
+        position: relative;
         background: #ffffff;
         border: 1px solid #e7e2d3;
         border-radius: 6px;
         min-height: 160px;
         overflow: hidden;
-        display: flex;
-        align-items: stretch;
-        justify-content: center;
       }
+
       #turtleCanvas {
         width: 100%;
+        display: block;
+        background: white;
+      }
+
+      #turtleOverlay {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
       }
 
       #console {
@@ -125,12 +143,16 @@
         <div id="runRow">
           <button id="runBtn">Loading Python…</button>
           <button id="clearBtn">Clear Console</button>
+          <button id="clearTurtleBtn">Clear Turtle</button>
           <span id="status"></span>
         </div>
 
         <pre id="generatedCode"><code></code></pre>
 
-        <canvas id="turtleCanvas" width="500" height="300"></canvas>
+        <div id="turtlePane">
+          <canvas id="turtleCanvas" width="500" height="300"></canvas>
+          <canvas id="turtleOverlay" width="500" height="300"></canvas>
+        </div>
 
         <div id="console" aria-live="polite"></div>
       </div>
@@ -140,155 +162,5 @@
 
     <!-- Pyodide -->
     <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
-
-    <script>
-      window.addEventListener("load", () => {
-        // elements
-        const runBtn = document.getElementById("runBtn");
-        const clearBtn = document.getElementById("clearBtn");
-        const genCodeEl = document.querySelector("#generatedCode code");
-        const consoleEl = document.getElementById("console");
-        const statusEl = document.getElementById("status");
-        const turtleCanvas = document.getElementById("turtleCanvas"); // placeholder
-
-        // console helpers
-        function clearConsole() {
-          consoleEl.textContent = "";
-        }
-        function write(t) {
-          consoleEl.textContent += String(t);
-          consoleEl.scrollTop = consoleEl.scrollHeight;
-        }
-        function writeln(t) {
-          write(String(t) + "\n");
-        }
-        clearBtn.addEventListener("click", clearConsole);
-
-        // ensure DropDownDiv exists
-        if (window.Blockly?.DropDownDiv?.createDom) {
-          Blockly.DropDownDiv.createDom();
-        }
-
-        // ----------- Toolbox -----------
-        const toolboxXml = `
-        <xml xmlns="https://developers.google.com/blockly/xml">
-          <category name="Logic" colour="#5C81A6">
-            <block type="controls_if"></block>
-            <block type="logic_compare"></block>
-            <block type="logic_operation"></block>
-            <block type="logic_boolean"></block>
-          </category>
-          <category name="Loops" colour="#5CA65C">
-            <block type="controls_repeat_ext">
-              <value name="TIMES"><shadow type="math_number"><field name="NUM">5</field></shadow></value>
-            </block>
-            <block type="controls_whileUntil"></block>
-            <block type="controls_for">
-              <value name="FROM"><shadow type="math_number"><field name="NUM">0</field></shadow></value>
-              <value name="TO"><shadow type="math_number"><field name="NUM">10</field></shadow></value>
-              <value name="BY"><shadow type="math_number"><field name="NUM">1</field></shadow></value>
-            </block>
-          </category>
-          <category name="Math" colour="#5C68A6">
-            <block type="math_number"><field name="NUM">0</field></block>
-            <block type="math_arithmetic"></block>
-            <block type="math_single"></block>
-          </category>
-          <category name="Text" colour="#5CA68D">
-            <block type="text"></block>
-            <block type="text_print"></block>
-            <block type="text_join"></block>
-          </category>
-          <category name="Variables" colour="#A65C81" custom="VARIABLE"></category>
-          <category name="Lists" colour="#745CA6">
-            <block type="lists_create_with"></block>
-            <block type="lists_repeat"></block>
-          </category>
-          <category name="Functions" colour="#9A6C1F" custom="PROCEDURE"></category>
-        </xml>`;
-
-        // Blockly
-        const workspace = Blockly.inject("blocklyDiv", {
-          toolbox: Blockly.utils.xml.textToDom(toolboxXml),
-          grid: { spacing: 20, length: 3, colour: "#eee", snap: true },
-          zoom: { controls: true, wheel: true },
-          trashcan: true,
-        });
-
-        // Generated Python Box (top left)
-        function updateGenerated() {
-          if (!Blockly.Python || !Blockly.Python.workspaceToCode) {
-            return;
-          }
-          const py = Blockly.Python.workspaceToCode(workspace) || "";
-          genCodeEl.textContent = py;
-        }
-        workspace.addChangeListener(updateGenerated);
-        updateGenerated();
-
-        // Pyodide Things
-        let pyodide = null;
-        runBtn.disabled = true;
-        statusEl.textContent = "Loading Pyodide…";
-
-        (async () => {
-          try {
-            pyodide = await loadPyodide({
-              indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/",
-            });
-            runBtn.textContent = "Run";
-            runBtn.disabled = false;
-            statusEl.textContent = "Pyodide loaded";
-          } catch (e) {
-            statusEl.textContent = "Pyodide failed to load";
-            runBtn.textContent = "Load failed";
-            console.error(e);
-            writeln("Failed to load Pyodide (check network/CSP).");
-          }
-        })();
-
-        // Redirect Python stdout/stderr to JS console
-        const PY_PRELUDE = `
-        import sys
-        class _JSWriter:
-            def write(self, s):
-                import js
-                js._write(s)
-            def flush(self): pass
-        sys.stdout = _JSWriter()
-        sys.stderr = _JSWriter()
-          `;
-
-        // text appears in console
-        window._write = (s) => {
-          write(s);
-        };
-
-        // future canvas drawing reset
-        function resetTurtle() {
-          turtleCanvas.innerHTML = "";
-        }
-
-        // run button
-        runBtn.addEventListener("click", async () => {
-          if (!pyodide) return;
-          clearConsole();
-          resetTurtle();
-
-          if (!Blockly.Python || !Blockly.Python.workspaceToCode) {
-            return;
-          }
-
-          const userCode = Blockly.Python.workspaceToCode(workspace) || "";
-          const fullCode = PY_PRELUDE + "\n" + userCode;
-
-          try {
-            await pyodide.runPythonAsync(fullCode);
-          } catch (err) {
-            writeln(String(err));
-          }
-        });
-      });
-    </script>
   </body>
 </html>
