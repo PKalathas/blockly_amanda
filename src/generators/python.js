@@ -11,7 +11,16 @@ export function generatePython(ws) {
 }
 
 pythonGenerator.forBlock['turtle_start'] = function (block) {
-    const statements = pythonGenerator.statementToCode(block, 'DO') || '';
+    let statements = pythonGenerator.statementToCode(block, 'DO') || '';
+
+    const indent = pythonGenerator.INDENT || '  ';
+    const re = new RegExp('^' + indent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+    statements = statements
+        .split('\n')
+        .map((line) => line.replace(re, ''))
+        .join('\n');
+
     return statements;
 };
 
