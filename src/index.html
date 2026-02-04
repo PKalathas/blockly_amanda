@@ -83,8 +83,12 @@
         font-size: 13px;
         line-height: 1.35;
         max-height: 32vh;
+        height: 32vh;
         overflow: auto;
-        white-space: pre-wrap;
+        white-space: pre;
+        resize: vertical;
+        box-sizing: border-box;
+        width: 100%;
       }
 
       #turtlePane {
@@ -147,7 +151,7 @@
           <span id="status"></span>
         </div>
 
-        <pre id="generatedCode"><code></code></pre>
+        <textarea id="generatedCode" spellcheck="false"></textarea>
 
         <div id="turtlePane">
           <canvas id="turtleCanvas" width="500" height="300"></canvas>
