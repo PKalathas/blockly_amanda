@@ -138,23 +138,291 @@ function makeTurtle(drawCanvas, overlayCanvas) {
   };
 }
 
+function makeTurtlePlayer(delayMs = 80) {
+  const queue = [];
+  let isPlaying = false;
+
+  function enqueue(fn) {
+    queue.push(fn);
+  }
+
+  function clearQueue() {
+    queue.length = 0;
+  }
+
+  async function play() {
+    if (isPlaying) return;
+    isPlaying = true;
+
+    while (queue.length > 0) {
+      const fn = queue.shift();
+      if (fn) fn();
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+
+    isPlaying = false;
+  }
+
+  return {
+    enqueue,
+    clearQueue,
+    play,
+  };
+}
+
+function makeQueuedTurtle(turtle, player) {
+  return {
+    forward(d) {
+      player.enqueue(() => turtle.forward(d));
+    },
+    backward(d) {
+      player.enqueue(() => turtle.backward(d));
+    },
+    left(a) {
+      player.enqueue(() => turtle.left(a));
+    },
+    right(a) {
+      player.enqueue(() => turtle.right(a));
+    },
+    penup() {
+      player.enqueue(() => turtle.penup());
+    },
+    pendown() {
+      player.enqueue(() => turtle.pendown());
+    },
+    goto(x, y) {
+      player.enqueue(() => turtle.goto(x, y));
+    },
+    setx(x) {
+      player.enqueue(() => turtle.setx(x));
+    },
+    sety(y) {
+      player.enqueue(() => turtle.sety(y));
+    },
+    setheading(a) {
+      player.enqueue(() => turtle.setheading(a));
+    },
+    clear() {
+      player.enqueue(() => turtle.clear());
+    },
+  };
+}
+
+function debounceFactory() {
+  let timer = null;
+  return function debounce(fn, ms = 300) {
+    clearTimeout(timer);
+    timer = setTimeout(fn, ms);
+  };
+}
+
+function detectTurtleAlias(pyText) {
+  const m = pyText.match(/import\s+turtlejs\s+as\s+([A-Za-z_]\w*)/);
+  if (m) return m[1];
+  return 't';
+}
+
+function parsePyStringLiteral(s) {
+  const t = s.trim();
+  if (
+    (t.startsWith("'") && t.endsWith("'")) ||
+    (t.startsWith('"') && t.endsWith('"'))
+  ) {
+    const inner = t.slice(1, -1);
+    return inner
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\\\/g, '\\')
+      .replace(/\\"/g, '"')
+      .replace(/\\'/g, "'");
+  }
+  return null;
+}
+
+function parsePythonToSteps(pyText) {
+  const alias = detectTurtleAlias(pyText);
+
+  const lines = pyText
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'));
+
+  const steps = [];
+
+  const turtleCallRe = new RegExp(
+    `^(?:${alias}|turtle|turtlejs|t)\\.(forward|backward|left|right|penup|pendown|goto|setx|sety|setheading)\\((.*)\\)\\s*$`
+  );
+
+  const printRe = /^print\((.*)\)\s*$/;
+
+  for (const rawLine of lines) {
+    if (
+      rawLine.startsWith('import ') ||
+      rawLine.startsWith('from ') ||
+      rawLine.startsWith('sys.') ||
+      rawLine.startsWith('class ') ||
+      rawLine.startsWith('def ') ||
+      rawLine === 'pass'
+    ) {
+      continue;
+    }
+
+    const line = rawLine.replace(/[;]+$/, '').trim();
+
+    const pm = line.match(printRe);
+    if (pm) {
+      const inside = (pm[1] ?? '').trim();
+      if (!inside) {
+        steps.push({ kind: 'print', text: '' });
+        continue;
+      }
+      const str = parsePyStringLiteral(inside);
+      if (str == null) {
+        return {
+          ok: false,
+          reason: `Only print('...') or print("...") supported for sync: ${rawLine}`,
+        };
+      }
+      steps.push({ kind: 'print', text: str });
+      continue;
+    }
+
+    const tm = line.match(turtleCallRe);
+    if (!tm) {
+      return { ok: false, reason: `Unsupported Python for sync: ${rawLine}` };
+    }
+
+    const fn = tm[1];
+    const argsRaw = (tm[2] ?? '').trim();
+    const args = argsRaw
+      ? argsRaw.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
+
+    steps.push({ kind: 'turtle', fn, args });
+  }
+
+  return { ok: true, steps };
+}
+
+function numberShadow(n) {
+  return {
+    shadow: {
+      type: 'math_number',
+      fields: { NUM: String(n) },
+    },
+  };
+}
+
+function textShadow(s) {
+  return {
+    shadow: {
+      type: 'text',
+      fields: { TEXT: String(s) },
+    },
+  };
+}
+
+function stepsToWorkspaceJson(steps) {
+  let first = null;
+  let prev = null;
+
+  const append = (block) => {
+    if (!first) first = block;
+    if (prev) prev.next = { block };
+    prev = block;
+  };
+
+  steps.forEach((step, i) => {
+    if (step.kind === 'print') {
+      append({
+        type: 'text_print',
+        id: `p${i}`,
+        inputs: { TEXT: textShadow(step.text ?? '') },
+      });
+      return;
+    }
+
+    if (step.kind === 'turtle') {
+      const TYPE = {
+        forward: 'turtle_forward',
+        backward: 'turtle_backward',
+        left: 'turtle_left',
+        right: 'turtle_right',
+        goto: 'turtle_goto',
+        setx: 'turtle_setx',
+        sety: 'turtle_sety',
+        setheading: 'turtle_setheading',
+        penup: 'turtle_penup',
+        pendown: 'turtle_pendown',
+      };
+
+      const type = TYPE[step.fn];
+      if (!type) return;
+
+      const block = { type, id: `t${i}`, inputs: {} };
+
+      if (step.fn === 'forward' || step.fn === 'backward') {
+        block.inputs.STEPS = numberShadow(step.args[0] ?? 0);
+      } else if (
+        step.fn === 'left' ||
+        step.fn === 'right' ||
+        step.fn === 'setheading'
+      ) {
+        block.inputs.ANGLE = numberShadow(step.args[0] ?? 0);
+      } else if (step.fn === 'goto') {
+        block.inputs.X = numberShadow(step.args[0] ?? 0);
+        block.inputs.Y = numberShadow(step.args[1] ?? 0);
+      } else if (step.fn === 'setx') {
+        block.inputs.X = numberShadow(step.args[0] ?? 0);
+      } else if (step.fn === 'sety') {
+        block.inputs.Y = numberShadow(step.args[0] ?? 0);
+      }
+
+      append(block);
+    }
+  });
+
+  const blocks = [];
+  if (first) {
+    first.x = 20;
+    first.y = 20;
+    blocks.push(first);
+  }
+
+  return {
+    blocks: {
+      languageVersion: 0,
+      blocks,
+    },
+  };
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   const runBtn = document.getElementById('runBtn');
   const clearBtn = document.getElementById('clearBtn');
   const clearTurtleBtn = document.getElementById('clearTurtleBtn');
 
-  const codeEl = document.querySelector('#generatedCode code');
+  const codeBox = document.getElementById('generatedCode');
+
   const consoleEl = document.getElementById('console');
   const statusEl = document.getElementById('status');
   const turtleCanvas = document.getElementById('turtleCanvas');
   const turtleOverlay = document.getElementById('turtleOverlay');
 
-  if (!runBtn || !clearBtn || !codeEl || !consoleEl || !statusEl || !turtleCanvas || !turtleOverlay) {
+  if (
+    !runBtn ||
+    !clearBtn ||
+    !clearTurtleBtn ||
+    !codeBox ||
+    !consoleEl ||
+    !statusEl ||
+    !turtleCanvas ||
+    !turtleOverlay
+  ) {
     console.error('Missing DOM nodes. Check ids in index.html.');
     return;
   }
 
-  // prevent early DropDownDiv crash
   if (Blockly.DropDownDiv?.createDom) Blockly.DropDownDiv.createDom();
 
   const ws = Blockly.inject('blocklyDiv', {
@@ -166,18 +434,76 @@ window.addEventListener('DOMContentLoaded', () => {
 
   load(ws);
 
-  function updateGenerated() {
+  let codeDirty = false;
+  let isApplyingTextToBlocks = false;
+  let isEditingCodeBox = false;
+  const debounce = debounceFactory();
+
+  codeBox.addEventListener('focus', () => (isEditingCodeBox = true));
+  codeBox.addEventListener('blur', () => (isEditingCodeBox = false));
+
+  function updateGeneratedFromBlocks() {
     const py = generatePython(ws) || '';
-    codeEl.textContent = py;
+    if (!codeDirty && !isEditingCodeBox) {
+      codeBox.value = py;
+    }
     return py;
   }
 
-  ws.addChangeListener((e) => {
-    if (!e.isUiEvent) save(ws);
-    updateGenerated();
+  function workspaceIsTurtlePrintOnly() {
+    const allowed = new Set(['text_print']);
+    return ws
+      .getAllBlocks(false)
+      .filter((b) => !b.isShadow())
+      .every((b) => b.type.startsWith('turtle_') || allowed.has(b.type));
+  }
+
+  function trySyncBlocksFromPython(pyText) {
+    if (!workspaceIsTurtlePrintOnly()) {
+      statusEl.textContent =
+        'Python→Blocks sync supports only turtle + print for now.';
+      return;
+    }
+
+    const parsed = parsePythonToSteps(pyText);
+    if (!parsed.ok) {
+      statusEl.textContent = parsed.reason || 'Cannot sync blocks from Python';
+      return;
+    }
+
+    const wsJson = stepsToWorkspaceJson(parsed.steps);
+
+    isApplyingTextToBlocks = true;
+    try {
+      Blockly.serialization.workspaces.load(wsJson, ws);
+      if (!isEditingCodeBox) codeDirty = false;
+      statusEl.textContent = 'Synced Python → Blocks';
+    } finally {
+      isApplyingTextToBlocks = false;
+    }
+  }
+
+  codeBox.addEventListener('input', () => {
+    codeDirty = true;
+    if (isApplyingTextToBlocks) return;
+
+    debounce(() => {
+      trySyncBlocksFromPython(codeBox.value);
+    }, 350);
   });
 
-  updateGenerated();
+  ws.addChangeListener((e) => {
+    if (!e.isUiEvent) save(ws);
+    if (isApplyingTextToBlocks) return;
+
+    if (e.type !== Blockly.Events.UI) {
+      codeDirty = false;
+      updateGeneratedFromBlocks();
+      statusEl.textContent = 'Code Blocks → Python';
+    }
+  });
+
+  updateGeneratedFromBlocks();
 
   // console helpers
   function clearConsole() {
@@ -192,7 +518,13 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   clearBtn.addEventListener('click', clearConsole);
+
+  let pyodide = null;
+  let turtle = null;
+  let turtlePlayer = null;
+
   clearTurtleBtn.addEventListener('click', () => {
+    if (turtlePlayer) turtlePlayer.clearQueue();
     if (turtle) turtle.clear();
   });
 
@@ -209,10 +541,6 @@ sys.stdout = _JSWriter()
 sys.stderr = _JSWriter()
 `;
 
-  // Pyodide + turtle module
-  let pyodide = null;
-  let turtle = null;
-
   runBtn.disabled = true;
   runBtn.textContent = 'Loading Python…';
   statusEl.textContent = 'Loading Pyodide…';
@@ -224,7 +552,10 @@ sys.stderr = _JSWriter()
       });
 
       turtle = makeTurtle(turtleCanvas, turtleOverlay);
-      pyodide.registerJsModule('turtlejs', turtle);
+
+      turtlePlayer = makeTurtlePlayer(80);
+      const queuedTurtle = makeQueuedTurtle(turtle, turtlePlayer);
+      pyodide.registerJsModule('turtlejs', queuedTurtle);
 
       runBtn.disabled = false;
       runBtn.textContent = 'Run';
@@ -237,18 +568,23 @@ sys.stderr = _JSWriter()
     }
   })();
 
-  // Run button
   runBtn.addEventListener('click', async () => {
     if (!pyodide) return;
 
     clearConsole();
+    if (turtlePlayer) turtlePlayer.clearQueue();
     if (turtle) turtle.clear();
 
-    const py = updateGenerated();
+    const py = codeBox.value;
     const fullCode = PY_PRELUDE + '\n' + py;
 
     try {
       await pyodide.runPythonAsync(fullCode);
+
+      if (turtlePlayer) {
+        await turtlePlayer.play();
+      }
+
       if (!consoleEl.textContent.trim()) consoleEl.textContent = '(no output)';
     } catch (err) {
       writeln(String(err));
