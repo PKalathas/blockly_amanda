@@ -2,12 +2,22 @@ import { pythonGenerator } from 'blockly/python';
 
 const TURTLE_PREAMBLE = `import turtlejs as t\n\n`;
 
+pythonGenerator.forBlock['python_raw'] = function (block) {
+    const code = block.getFieldValue('CODE') || '';
+    return code.endsWith('\n') ? code : code + '\n';
+};
+
 export function generatePython(ws) {
     const body = pythonGenerator.workspaceToCode(ws);
 
-    // only add turtle library if there are turtle blocks
-    const hasTurtle = ws.getAllBlocks(false).some(b => b.type.startsWith('turtle_'));
-    return (hasTurtle ? TURTLE_PREAMBLE : '') + body;
+    const hasTurtle = ws.getAllBlocks(false).some((b) => b.type.startsWith('turtle_'));
+
+    const rawBlocks = ws.getAllBlocks(false).filter((b) => b.type === 'python_raw');
+    const rawText = rawBlocks.map((b) => b.getFieldValue('CODE') || '').join('\n');
+    const rawAlreadyImportsTurtle = /import\s+turtlejs\s+as\s+t\b/.test(rawText);
+
+    const preamble = hasTurtle && !rawAlreadyImportsTurtle ? TURTLE_PREAMBLE : '';
+    return preamble + body;
 }
 
 pythonGenerator.forBlock['turtle_start'] = function (block) {
@@ -25,22 +35,26 @@ pythonGenerator.forBlock['turtle_start'] = function (block) {
 };
 
 pythonGenerator.forBlock['turtle_forward'] = function (block) {
-    const steps = pythonGenerator.valueToCode(block, 'STEPS', pythonGenerator.ORDER_NONE) || '0';
+    const steps =
+        pythonGenerator.valueToCode(block, 'STEPS', pythonGenerator.ORDER_NONE) || '0';
     return `t.forward(${steps})\n`;
 };
 
 pythonGenerator.forBlock['turtle_backward'] = function (block) {
-    const steps = pythonGenerator.valueToCode(block, 'STEPS', pythonGenerator.ORDER_NONE) || '0';
+    const steps =
+        pythonGenerator.valueToCode(block, 'STEPS', pythonGenerator.ORDER_NONE) || '0';
     return `t.backward(${steps})\n`;
 };
 
 pythonGenerator.forBlock['turtle_left'] = function (block) {
-    const angle = pythonGenerator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
+    const angle =
+        pythonGenerator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
     return `t.left(${angle})\n`;
 };
 
 pythonGenerator.forBlock['turtle_right'] = function (block) {
-    const angle = pythonGenerator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
+    const angle =
+        pythonGenerator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
     return `t.right(${angle})\n`;
 };
 
@@ -61,7 +75,8 @@ pythonGenerator.forBlock['turtle_sety'] = function (block) {
 };
 
 pythonGenerator.forBlock['turtle_setheading'] = function (block) {
-    const a = pythonGenerator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
+    const a =
+        pythonGenerator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
     return `t.setheading(${a})\n`;
 };
 
