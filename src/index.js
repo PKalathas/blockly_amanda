@@ -9,6 +9,7 @@ import 'blockly/blocks';
 import { generatePython } from './generators/python';
 import './blocks/text';
 import './blocks/turtle';
+import './blocks/python_raw';
 import { save, load } from './serialization';
 import { toolbox } from './toolbox';
 import './index.css';
@@ -241,11 +242,8 @@ function parsePyStringLiteral(s) {
 
 function parsePythonToSteps(pyText) {
   const alias = detectTurtleAlias(pyText);
-
-  const lines = pyText
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith('#'));
+  const rawLines = pyText.split('\n');
+  const lines = rawLines.map((raw) => ({ raw, t: raw.trim() }));
 
   const steps = [];
 
@@ -255,51 +253,126 @@ function parsePythonToSteps(pyText) {
 
   const printRe = /^print\((.*)\)\s*$/;
 
-  for (const rawLine of lines) {
-    if (
-      rawLine.startsWith('import ') ||
-      rawLine.startsWith('from ') ||
-      rawLine.startsWith('sys.') ||
-      rawLine.startsWith('class ') ||
-      rawLine.startsWith('def ') ||
-      rawLine === 'pass'
-    ) {
+  const ifSqrtRe =
+    /^if\s+(\d+(?:\.\d+)?)\s*(!=|==|<=|>=|<|>)\s*math\.sqrt\(\s*(\d+(?:\.\d+)?)\s*\)\s*:\s*$/;
+
+  const opToBlockly = {
+    '==': 'EQ',
+    '!=': 'NEQ',
+    '<': 'LT',
+    '<=': 'LTE',
+    '>': 'GT',
+    '>=': 'GTE',
+  };
+
+  let rawBuf = [];
+
+  const flushRaw = () => {
+    if (rawBuf.length === 0) return;
+    while (rawBuf.length && rawBuf[0].trim() === '') rawBuf.shift();
+    while (rawBuf.length && rawBuf[rawBuf.length - 1].trim() === '') rawBuf.pop();
+    if (rawBuf.length) steps.push({ kind: 'raw', code: rawBuf.join('\n') });
+    rawBuf = [];
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const { raw, t } = lines[i];
+
+    if (/^import\s+math\s*$/.test(t)) {
       continue;
     }
 
-    const line = rawLine.replace(/[;]+$/, '').trim();
+    if (/^import\s+turtlejs\s+as\s+t\s*$/.test(t)) {
+      continue;
+    }
 
-    const pm = line.match(printRe);
-    if (pm) {
-      const inside = (pm[1] ?? '').trim();
-      if (!inside) {
-        steps.push({ kind: 'print', text: '' });
+    if (!t) {
+      flushRaw();
+      if (steps.length && steps[steps.length - 1].kind !== 'sep') {
+        steps.push({ kind: 'sep' });
+      }
+      continue;
+    }
+
+    if (t.startsWith('#')) {
+      rawBuf.push(raw);
+      continue;
+    }
+
+    const im = t.match(ifSqrtRe);
+    if (im) {
+      let j = i + 1;
+      while (j < lines.length && lines[j].t === '') j++;
+
+      if (j >= lines.length || !/^\s+/.test(lines[j].raw)) {
+        rawBuf.push(raw);
         continue;
       }
-      const str = parsePyStringLiteral(inside);
-      if (str == null) {
-        return {
-          ok: false,
-          reason: `Only print('...') or print("...") supported for sync: ${rawLine}`,
-        };
+
+      const bodyTrim = lines[j].t;
+      const pm = bodyTrim.match(printRe);
+
+      if (!pm) {
+        rawBuf.push(raw);
+        rawBuf.push(lines[j].raw);
+        i = j;
+        continue;
       }
-      steps.push({ kind: 'print', text: str });
+
+      const inside = (pm[1] ?? '').trim();
+      const str = inside ? parsePyStringLiteral(inside) : '';
+      if (str == null) {
+        rawBuf.push(raw);
+        rawBuf.push(lines[j].raw);
+        i = j;
+        continue;
+      }
+
+      flushRaw();
+
+      steps.push({
+        kind: 'if_sqrt_print',
+        leftNum: Number(im[1]),
+        op: opToBlockly[im[2]] ?? 'NEQ',
+        sqrtArg: Number(im[3]),
+        printText: str,
+      });
+
+      i = j;
       continue;
     }
 
-    const tm = line.match(turtleCallRe);
-    if (!tm) {
-      return { ok: false, reason: `Unsupported Python for sync: ${rawLine}` };
+    const pm = t.match(printRe);
+    if (pm) {
+      const inside = (pm[1] ?? '').trim();
+      const str = inside ? parsePyStringLiteral(inside) : '';
+      if (str == null) {
+        rawBuf.push(raw);
+        continue;
+      }
+      flushRaw();
+      steps.push({ kind: 'print', text: str ?? '' });
+      continue;
     }
 
-    const fn = tm[1];
-    const argsRaw = (tm[2] ?? '').trim();
-    const args = argsRaw
-      ? argsRaw.split(',').map((s) => s.trim()).filter(Boolean)
-      : [];
+    const tm = t.match(turtleCallRe);
+    if (tm) {
+      const fn = tm[1];
+      const argsRaw = (tm[2] ?? '').trim();
+      const args = argsRaw
+        ? argsRaw.split(',').map((s) => s.trim()).filter(Boolean)
+        : [];
+      flushRaw();
+      steps.push({ kind: 'turtle', fn, args });
+      continue;
+    }
 
-    steps.push({ kind: 'turtle', fn, args });
+    rawBuf.push(raw);
   }
+
+  flushRaw();
+
+  while (steps.length && steps[steps.length - 1].kind === 'sep') steps.pop();
 
   return { ok: true, steps };
 }
@@ -322,9 +395,22 @@ function textShadow(s) {
   };
 }
 
-function stepsToWorkspaceJson(steps) {
+function stepsToWorkspaceJson(steps, posById = {}) {
+  const topBlocks = [];
+
   let first = null;
   let prev = null;
+
+  const startNewStack = () => {
+    first = null;
+    prev = null;
+  };
+
+  const pushStackIfAny = () => {
+    if (!first) return;
+    topBlocks.push(first);
+    startNewStack();
+  };
 
   const append = (block) => {
     if (!first) first = block;
@@ -332,12 +418,83 @@ function stepsToWorkspaceJson(steps) {
     prev = block;
   };
 
+  let fallbackX = 20;
+  let fallbackY = 20;
+  const bumpFallback = () => {
+    fallbackY += 140;
+    if (fallbackY > 700) {
+      fallbackY = 20;
+      fallbackX += 380;
+    }
+  };
+
+  const placeTopBlock = (block) => {
+    const p = posById[block.id];
+    if (p) {
+      block.x = p.x;
+      block.y = p.y;
+    } else {
+      block.x = fallbackX;
+      block.y = fallbackY;
+      bumpFallback();
+    }
+  };
+
   steps.forEach((step, i) => {
+    if (step.kind === 'sep') {
+      pushStackIfAny();
+      return;
+    }
+
+    if (step.kind === 'raw') {
+      append({
+        type: 'python_raw',
+        id: `raw${i}`,
+        fields: { CODE: step.code ?? '' },
+      });
+      return;
+    }
+
     if (step.kind === 'print') {
       append({
         type: 'text_print',
         id: `p${i}`,
         inputs: { TEXT: textShadow(step.text ?? '') },
+      });
+      return;
+    }
+
+    if (step.kind === 'if_sqrt_print') {
+      append({
+        type: 'controls_if',
+        id: `if${i}`,
+        inputs: {
+          IF0: {
+            block: {
+              type: 'logic_compare',
+              id: `cmp${i}`,
+              fields: { OP: step.op },
+              inputs: {
+                A: numberShadow(step.leftNum),
+                B: {
+                  block: {
+                    type: 'math_single',
+                    id: `sqrt${i}`,
+                    fields: { OP: 'ROOT' },
+                    inputs: { NUM: numberShadow(step.sqrtArg) },
+                  },
+                },
+              },
+            },
+          },
+          DO0: {
+            block: {
+              type: 'text_print',
+              id: `ifp${i}`,
+              inputs: { TEXT: textShadow(step.printText ?? '') },
+            },
+          },
+        },
       });
       return;
     }
@@ -357,17 +514,20 @@ function stepsToWorkspaceJson(steps) {
       };
 
       const type = TYPE[step.fn];
-      if (!type) return;
+      if (!type) {
+        append({
+          type: 'python_raw',
+          id: `rawt${i}`,
+          fields: { CODE: `# unsupported turtle call: ${step.fn}\n` },
+        });
+        return;
+      }
 
       const block = { type, id: `t${i}`, inputs: {} };
 
       if (step.fn === 'forward' || step.fn === 'backward') {
         block.inputs.STEPS = numberShadow(step.args[0] ?? 0);
-      } else if (
-        step.fn === 'left' ||
-        step.fn === 'right' ||
-        step.fn === 'setheading'
-      ) {
+      } else if (step.fn === 'left' || step.fn === 'right' || step.fn === 'setheading') {
         block.inputs.ANGLE = numberShadow(step.args[0] ?? 0);
       } else if (step.fn === 'goto') {
         block.inputs.X = numberShadow(step.args[0] ?? 0);
@@ -382,17 +542,14 @@ function stepsToWorkspaceJson(steps) {
     }
   });
 
-  const blocks = [];
-  if (first) {
-    first.x = 20;
-    first.y = 20;
-    blocks.push(first);
-  }
+  pushStackIfAny();
+
+  topBlocks.forEach((b) => placeTopBlock(b));
 
   return {
     blocks: {
       languageVersion: 0,
-      blocks,
+      blocks: topBlocks,
     },
   };
 }
@@ -401,9 +558,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const runBtn = document.getElementById('runBtn');
   const clearBtn = document.getElementById('clearBtn');
   const clearTurtleBtn = document.getElementById('clearTurtleBtn');
-
   const codeBox = document.getElementById('generatedCode');
-
   const consoleEl = document.getElementById('console');
   const statusEl = document.getElementById('status');
   const turtleCanvas = document.getElementById('turtleCanvas');
@@ -450,34 +605,36 @@ window.addEventListener('DOMContentLoaded', () => {
     return py;
   }
 
-  function workspaceIsTurtlePrintOnly() {
-    const allowed = new Set(['text_print']);
-    return ws
-      .getAllBlocks(false)
-      .filter((b) => !b.isShadow())
-      .every((b) => b.type.startsWith('turtle_') || allowed.has(b.type));
-  }
-
   function trySyncBlocksFromPython(pyText) {
-    if (!workspaceIsTurtlePrintOnly()) {
-      statusEl.textContent =
-        'Python→Blocks sync supports only turtle + print for now.';
-      return;
-    }
-
     const parsed = parsePythonToSteps(pyText);
     if (!parsed.ok) {
       statusEl.textContent = parsed.reason || 'Cannot sync blocks from Python';
       return;
     }
 
-    const wsJson = stepsToWorkspaceJson(parsed.steps);
+    const posById = {};
+    ws.getTopBlocks(false).forEach((b) => {
+      const xy = b.getRelativeToSurfaceXY();
+      posById[b.id] = { x: xy.x, y: xy.y };
+    });
+
+    const wsJson = stepsToWorkspaceJson(parsed.steps, posById);
 
     isApplyingTextToBlocks = true;
     try {
       Blockly.serialization.workspaces.load(wsJson, ws);
-      if (!isEditingCodeBox) codeDirty = false;
+
+      ws.getTopBlocks(false).forEach((b) => {
+        const p = posById[b.id];
+        if (p) {
+          b.moveBy(p.x - b.getRelativeToSurfaceXY().x, p.y - b.getRelativeToSurfaceXY().y);
+        }
+      });
+
+      ws.render();
+
       statusEl.textContent = 'Synced Python → Blocks';
+      if (!isEditingCodeBox) codeDirty = false;
     } finally {
       isApplyingTextToBlocks = false;
     }
@@ -489,7 +646,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     debounce(() => {
       trySyncBlocksFromPython(codeBox.value);
-    }, 350);
+    }, 250);
   });
 
   ws.addChangeListener((e) => {
@@ -499,13 +656,12 @@ window.addEventListener('DOMContentLoaded', () => {
     if (e.type !== Blockly.Events.UI) {
       codeDirty = false;
       updateGeneratedFromBlocks();
-      statusEl.textContent = 'Code Blocks → Python';
+      statusEl.textContent = 'Synced Blocks → Python';
     }
   });
 
   updateGeneratedFromBlocks();
 
-  // console helpers
   function clearConsole() {
     consoleEl.textContent = '';
   }
