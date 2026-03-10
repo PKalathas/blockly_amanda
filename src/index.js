@@ -49,24 +49,37 @@ function makeTurtle(drawCanvas, overlayCanvas) {
     octx.translate(x, y);
     octx.rotate(-rad(heading));
 
-    const size = 10;
-
+    // Shell
     octx.beginPath();
-    octx.moveTo(size, 0);
-    octx.lineTo(-size * 0.8, size * 0.6);
-    octx.lineTo(-size * 0.8, -size * 0.6);
-    octx.closePath();
-
-    octx.fillStyle = 'rgba(34, 197, 94, 0.95)';
-    octx.strokeStyle = 'rgba(0,0,0,0.6)';
+    octx.ellipse(0, 0, 10, 14, 0, 0, Math.PI * 2);
+    octx.fillStyle = 'rgba(34, 197, 94, 0.9)';
+    octx.fill();
+    octx.strokeStyle = 'rgba(0,0,0,0.5)';
     octx.lineWidth = 1;
+    octx.stroke();
+
+    // Head
+    octx.beginPath();
+    octx.arc(0, -18, 4, 0, Math.PI * 2);
+    octx.fillStyle = 'rgba(34, 197, 94, 0.9)';
     octx.fill();
     octx.stroke();
 
+    // Legs
     octx.beginPath();
-    octx.arc(0, 0, 2, 0, Math.PI * 2);
-    octx.fillStyle = 'rgba(0,0,0,0.45)';
+    octx.arc(-12, -6, 3, 0, Math.PI * 2);
+    octx.arc(12, -6, 3, 0, Math.PI * 2);
+    octx.arc(-12, 6, 3, 0, Math.PI * 2);
+    octx.arc(12, 6, 3, 0, Math.PI * 2);
+    octx.fillStyle = 'rgba(34, 197, 94, 0.85)';
     octx.fill();
+
+    // Tail
+    octx.beginPath();
+    octx.moveTo(0, 14);
+    octx.lineTo(0, 20);
+    octx.strokeStyle = 'rgba(0,0,0,0.5)';
+    octx.stroke();
 
     octx.restore();
   }
@@ -85,7 +98,7 @@ function makeTurtle(drawCanvas, overlayCanvas) {
 
   function resetState() {
     x = drawCanvas.width / 2;
-    y = drawCanvas.height / 2;
+    y = drawCanvas.width / 2;
     heading = 0;
     pen = true;
     drawTurtleIcon();
@@ -256,6 +269,8 @@ function parsePythonToSteps(pyText) {
   const ifSqrtRe =
     /^if\s+(\d+(?:\.\d+)?)\s*(!=|==|<=|>=|<|>)\s*math\.sqrt\(\s*(\d+(?:\.\d+)?)\s*\)\s*:\s*$/;
 
+  const assignRe = /^([A-Za-z_]\w*)\s*=\s*(.+)\s*$/;
+
   const opToBlockly = {
     '==': 'EQ',
     '!=': 'NEQ',
@@ -278,13 +293,8 @@ function parsePythonToSteps(pyText) {
   for (let i = 0; i < lines.length; i++) {
     const { raw, t } = lines[i];
 
-    if (/^import\s+math\s*$/.test(t)) {
-      continue;
-    }
-
-    if (/^import\s+turtlejs\s+as\s+t\s*$/.test(t)) {
-      continue;
-    }
+    if (/^import\s+math\s*$/.test(t)) continue;
+    if (/^import\s+turtlejs\s+as\s+t\s*$/.test(t)) continue;
 
     if (!t) {
       flushRaw();
@@ -367,32 +377,61 @@ function parsePythonToSteps(pyText) {
       continue;
     }
 
+    const am = t.match(assignRe);
+    if (am) {
+      const name = am[1];
+      const rhs = (am[2] ?? '').trim();
+
+      if (/^-?\d+(?:\.\d+)?$/.test(rhs)) {
+        flushRaw();
+        steps.push({
+          kind: 'var_set',
+          name,
+          value: { kind: 'number', value: Number(rhs) },
+        });
+        continue;
+      }
+
+      if (/^[A-Za-z_]\w*$/.test(rhs)) {
+        flushRaw();
+        steps.push({
+          kind: 'var_set',
+          name,
+          value: { kind: 'var_get', name: rhs },
+        });
+        continue;
+      }
+    }
+
     rawBuf.push(raw);
   }
 
   flushRaw();
-
   while (steps.length && steps[steps.length - 1].kind === 'sep') steps.pop();
-
   return { ok: true, steps };
 }
 
 function numberShadow(n) {
-  return {
-    shadow: {
-      type: 'math_number',
-      fields: { NUM: String(n) },
-    },
-  };
+  return { shadow: { type: 'math_number', fields: { NUM: String(n) } } };
 }
 
 function textShadow(s) {
-  return {
-    shadow: {
-      type: 'text',
-      fields: { TEXT: String(s) },
-    },
-  };
+  return { shadow: { type: 'text', fields: { TEXT: String(s) } } };
+}
+
+function varId(name) {
+  return `var_${name}`;
+}
+
+function collectVariableNamesFromSteps(steps) {
+  const set = new Set();
+  for (const step of steps) {
+    if (step.kind === 'var_set') {
+      set.add(step.name);
+      if (step.value?.kind === 'var_get') set.add(step.value.name);
+    }
+  }
+  return [...set];
 }
 
 function stepsToWorkspaceJson(steps, posById = {}) {
@@ -499,6 +538,41 @@ function stepsToWorkspaceJson(steps, posById = {}) {
       return;
     }
 
+    if (step.kind === 'var_set') {
+      const lhsName = step.name;
+      const lhsId = varId(lhsName);
+
+      const block = {
+        type: 'variables_set',
+        id: `vset${i}`,
+        fields: {
+          VAR: { name: lhsName, id: lhsId },
+        },
+        inputs: {},
+      };
+
+      if (step.value?.kind === 'number') {
+        block.inputs.VALUE = numberShadow(step.value.value);
+      } else if (step.value?.kind === 'var_get') {
+        const rhsName = step.value.name;
+        const rhsId = varId(rhsName);
+        block.inputs.VALUE = {
+          block: {
+            type: 'variables_get',
+            id: `vget${i}`,
+            fields: {
+              VAR: { name: rhsName, id: rhsId },
+            },
+          },
+        };
+      } else {
+        block.inputs.VALUE = numberShadow(0);
+      }
+
+      append(block);
+      return;
+    }
+
     if (step.kind === 'turtle') {
       const TYPE = {
         forward: 'turtle_forward',
@@ -527,7 +601,11 @@ function stepsToWorkspaceJson(steps, posById = {}) {
 
       if (step.fn === 'forward' || step.fn === 'backward') {
         block.inputs.STEPS = numberShadow(step.args[0] ?? 0);
-      } else if (step.fn === 'left' || step.fn === 'right' || step.fn === 'setheading') {
+      } else if (
+        step.fn === 'left' ||
+        step.fn === 'right' ||
+        step.fn === 'setheading'
+      ) {
         block.inputs.ANGLE = numberShadow(step.args[0] ?? 0);
       } else if (step.fn === 'goto') {
         block.inputs.X = numberShadow(step.args[0] ?? 0);
@@ -543,10 +621,17 @@ function stepsToWorkspaceJson(steps, posById = {}) {
   });
 
   pushStackIfAny();
-
   topBlocks.forEach((b) => placeTopBlock(b));
 
+  const variableNames = collectVariableNamesFromSteps(steps);
+  const variables = variableNames.map((name) => ({
+    name,
+    id: varId(name),
+    type: '',
+  }));
+
   return {
+    variables,
     blocks: {
       languageVersion: 0,
       blocks: topBlocks,
@@ -622,12 +707,17 @@ window.addEventListener('DOMContentLoaded', () => {
 
     isApplyingTextToBlocks = true;
     try {
+      ws.clear();
+
       Blockly.serialization.workspaces.load(wsJson, ws);
 
       ws.getTopBlocks(false).forEach((b) => {
         const p = posById[b.id];
         if (p) {
-          b.moveBy(p.x - b.getRelativeToSurfaceXY().x, p.y - b.getRelativeToSurfaceXY().y);
+          b.moveBy(
+            p.x - b.getRelativeToSurfaceXY().x,
+            p.y - b.getRelativeToSurfaceXY().y
+          );
         }
       });
 
