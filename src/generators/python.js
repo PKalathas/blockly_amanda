@@ -1,84 +1,100 @@
+import * as Blockly from 'blockly';
 import { pythonGenerator } from 'blockly/python';
 
-const TURTLE_PREAMBLE = `import turtlejs as t\n\n`;
+pythonGenerator.forBlock['text_print'] = function (block, generator) {
+  const msg =
+    generator.valueToCode(block, 'TEXT', pythonGenerator.ORDER_NONE) || "''";
+  return `print(${msg})\n`;
+};
 
 pythonGenerator.forBlock['python_raw'] = function (block) {
   const code = block.getFieldValue('CODE') || '';
-  return code.endsWith('\n') ? code : code + '\n';
+  return code.endsWith('\n') ? code : `${code}\n`;
 };
 
-export function generatePython(ws) {
-  const body = pythonGenerator.workspaceToCode(ws);
-
-  const hasTurtle = ws.getAllBlocks(false).some((b) => b.type.startsWith('turtle_'));
-
-  const rawBlocks = ws.getAllBlocks(false).filter((b) => b.type === 'python_raw');
-  const rawText = rawBlocks.map((b) => b.getFieldValue('CODE') || '').join('\n');
-  const rawAlreadyImportsTurtle = /import\s+turtlejs\s+as\s+t\b/.test(rawText);
-
-  const preamble = hasTurtle && !rawAlreadyImportsTurtle ? TURTLE_PREAMBLE : '';
-  return preamble + body;
-}
-
-pythonGenerator.forBlock['turtle_start'] = function (block) {
-  let statements = pythonGenerator.statementToCode(block, 'DO') || '';
-
-  const indent = pythonGenerator.INDENT || '  ';
-  const re = new RegExp('^' + indent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-
-  statements = statements
-    .split('\n')
-    .map((line) => line.replace(re, ''))
-    .join('\n');
-
-  return statements;
-};
-
-pythonGenerator.forBlock['turtle_forward'] = function (block) {
+pythonGenerator.forBlock['turtle_forward'] = function (block, generator) {
   const steps =
-    pythonGenerator.valueToCode(block, 'STEPS', pythonGenerator.ORDER_NONE) || '0';
+    generator.valueToCode(block, 'STEPS', pythonGenerator.ORDER_NONE) || '0';
   return `t.forward(${steps})\n`;
 };
 
-pythonGenerator.forBlock['turtle_backward'] = function (block) {
+pythonGenerator.forBlock['turtle_backward'] = function (block, generator) {
   const steps =
-    pythonGenerator.valueToCode(block, 'STEPS', pythonGenerator.ORDER_NONE) || '0';
+    generator.valueToCode(block, 'STEPS', pythonGenerator.ORDER_NONE) || '0';
   return `t.backward(${steps})\n`;
 };
 
-pythonGenerator.forBlock['turtle_left'] = function (block) {
+pythonGenerator.forBlock['turtle_left'] = function (block, generator) {
   const angle =
-    pythonGenerator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
+    generator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
   return `t.left(${angle})\n`;
 };
 
-pythonGenerator.forBlock['turtle_right'] = function (block) {
+pythonGenerator.forBlock['turtle_right'] = function (block, generator) {
   const angle =
-    pythonGenerator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
+    generator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
   return `t.right(${angle})\n`;
 };
 
-pythonGenerator.forBlock['turtle_goto'] = function (block) {
-  const x = pythonGenerator.valueToCode(block, 'X', pythonGenerator.ORDER_NONE) || '0';
-  const y = pythonGenerator.valueToCode(block, 'Y', pythonGenerator.ORDER_NONE) || '0';
+pythonGenerator.forBlock['turtle_penup'] = function () {
+  return `t.penup()\n`;
+};
+
+pythonGenerator.forBlock['turtle_pendown'] = function () {
+  return `t.pendown()\n`;
+};
+
+pythonGenerator.forBlock['turtle_goto'] = function (block, generator) {
+  const x =
+    generator.valueToCode(block, 'X', pythonGenerator.ORDER_NONE) || '0';
+  const y =
+    generator.valueToCode(block, 'Y', pythonGenerator.ORDER_NONE) || '0';
   return `t.goto(${x}, ${y})\n`;
 };
 
-pythonGenerator.forBlock['turtle_setx'] = function (block) {
-  const x = pythonGenerator.valueToCode(block, 'X', pythonGenerator.ORDER_NONE) || '0';
+pythonGenerator.forBlock['turtle_setx'] = function (block, generator) {
+  const x =
+    generator.valueToCode(block, 'X', pythonGenerator.ORDER_NONE) || '0';
   return `t.setx(${x})\n`;
 };
 
-pythonGenerator.forBlock['turtle_sety'] = function (block) {
-  const y = pythonGenerator.valueToCode(block, 'Y', pythonGenerator.ORDER_NONE) || '0';
+pythonGenerator.forBlock['turtle_sety'] = function (block, generator) {
+  const y =
+    generator.valueToCode(block, 'Y', pythonGenerator.ORDER_NONE) || '0';
   return `t.sety(${y})\n`;
 };
 
-pythonGenerator.forBlock['turtle_setheading'] = function (block) {
-  const a =
-    pythonGenerator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
-  return `t.setheading(${a})\n`;
+pythonGenerator.forBlock['turtle_setheading'] = function (block, generator) {
+  const angle =
+    generator.valueToCode(block, 'ANGLE', pythonGenerator.ORDER_NONE) || '0';
+  return `t.setheading(${angle})\n`;
 };
 
-pythonGenerator.forBlock['turtle_penup'] = () => `t.penup()\n`;
-pythonGenerator.forBlock['turtle_pendown'] = () => `t.pendown()\n`;
+pythonGenerator.init = function (workspace) {
+  this.definitions_ = Object.create(null);
+  this.functionNames_ = Object.create(null);
+
+  if (!this.nameDB_) {
+    this.nameDB_ = new Blockly.Names(this.RESERVED_WORDS_);
+  }
+
+  this.nameDB_.reset();
+  this.nameDB_.setVariableMap(workspace.getVariableMap());
+};
+
+pythonGenerator.finish = function (code) {
+  const definitions = Object.values(this.definitions_ || {});
+  const allCode = [...definitions, code].filter(Boolean).join('\n');
+
+  const needsTurtle =
+    /\bt\.(forward|backward|left|right|penup|pendown|goto|setx|sety|setheading)\(/.test(
+      allCode
+    );
+
+  const prefix = needsTurtle ? 'import turtlejs as t\n' : '';
+  return `${prefix}${allCode}`.replace(/\n{3,}/g, '\n\n').trim() + '\n';
+};
+
+export function generatePython(workspace) {
+  return pythonGenerator.workspaceToCode(workspace);
+}
