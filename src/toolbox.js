@@ -18,6 +18,25 @@ export const toolbox = {
   contents: [
     {
       kind: 'category',
+      name: 'Shapes',
+      colour: '#8b5cf6',
+      contents: [
+        {
+          kind: 'block',
+          type: 'shape_square',
+          inputs: {
+            SIZE: {
+              shadow: {
+                type: 'math_number',
+                fields: { NUM: 50 },
+              },
+            },
+          },
+        },
+      ],
+    },
+    {
+      kind: 'category',
       name: 'Logic',
       categorystyle: 'logic_category',
       contents: [
