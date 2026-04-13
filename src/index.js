@@ -10,6 +10,7 @@ import { generatePython } from './generators/python';
 import './blocks/text';
 import './blocks/turtle';
 import './blocks/python_raw';
+import './blocks/shapes';
 import { save, load } from './serialization';
 import { toolbox } from './toolbox';
 import './index.css';
