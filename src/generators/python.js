@@ -12,6 +12,13 @@ pythonGenerator.forBlock['python_raw'] = function (block) {
   return code.endsWith('\n') ? code : `${code}\n`;
 };
 
+pythonGenerator.forBlock['shape_square'] = function (block, generator) {
+  const size =
+    generator.valueToCode(block, 'SIZE', pythonGenerator.ORDER_NONE) || '50';
+
+  return `for _ in range(4):\n    t.forward(${size})\n    t.right(90)\n`;
+};
+
 pythonGenerator.forBlock['turtle_forward'] = function (block, generator) {
   const steps =
     generator.valueToCode(block, 'STEPS', pythonGenerator.ORDER_NONE) || '0';
