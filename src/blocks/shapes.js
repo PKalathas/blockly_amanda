@@ -1,7 +1,5 @@
 import * as Blockly from 'blockly';
 
-const SHAPES_COLOR = 210;
-
 Blockly.defineBlocksWithJsonArray([
     {
         type: 'shape_square',
@@ -15,6 +13,20 @@ Blockly.defineBlocksWithJsonArray([
         ],
         previousStatement: null,
         nextStatement: null,
-        colour: SHAPES_COLOR,
+        colour: 210,
+    },
+    {
+        type: 'turtle_setcolor',
+        message0: 'set pen color to %1',
+        args0: [
+            {
+                type: 'input_value',
+                name: 'COLOR',
+                check: 'String',
+            },
+        ],
+        previousStatement: null,
+        nextStatement: null,
+        colour: 120,
     },
 ]);
