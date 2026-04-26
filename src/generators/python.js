@@ -19,6 +19,12 @@ pythonGenerator.forBlock['shape_square'] = function (block, generator) {
   return `for _ in range(4):\n    t.forward(${size})\n    t.right(90)\n`;
 };
 
+pythonGenerator.forBlock['turtle_setcolor'] = function (block, generator) {
+  const color =
+    generator.valueToCode(block, 'COLOR', pythonGenerator.ORDER_NONE) || "'black'";
+  return `t.setcolor(${color})\n`;
+};
+
 pythonGenerator.forBlock['turtle_forward'] = function (block, generator) {
   const steps =
     generator.valueToCode(block, 'STEPS', pythonGenerator.ORDER_NONE) || '0';
@@ -94,7 +100,7 @@ pythonGenerator.finish = function (code) {
   const allCode = [...definitions, code].filter(Boolean).join('\n');
 
   const needsTurtle =
-    /\bt\.(forward|backward|left|right|penup|pendown|goto|setx|sety|setheading)\(/.test(
+    /\bt\.(forward|backward|left|right|penup|pendown|goto|setx|sety|setheading|setcolor)\(/.test(
       allCode
     );
 

@@ -9,8 +9,8 @@ import 'blockly/blocks';
 import { generatePython } from './generators/python';
 import './blocks/text';
 import './blocks/turtle';
-import './blocks/python_raw';
 import './blocks/shapes';
+import './blocks/python_raw';
 import { save, load } from './serialization';
 import { toolbox } from './toolbox';
 import './index.css';
@@ -32,6 +32,9 @@ function makeTurtle(drawCanvas, overlayCanvas) {
   ctx.lineWidth = 2;
   ctx.lineCap = 'round';
 
+  let penColor = 'black';
+  ctx.strokeStyle = penColor;
+
   let x = drawCanvas.width / 2;
   let y = drawCanvas.height / 2;
   let heading = 0; // degrees, 0 = east/right
@@ -50,7 +53,6 @@ function makeTurtle(drawCanvas, overlayCanvas) {
     octx.translate(x, y);
     octx.rotate(-rad(heading));
 
-    // Shell
     octx.beginPath();
     octx.ellipse(0, 0, 10, 14, 0, 0, Math.PI * 2);
     octx.fillStyle = 'rgba(34, 197, 94, 0.9)';
@@ -59,14 +61,12 @@ function makeTurtle(drawCanvas, overlayCanvas) {
     octx.lineWidth = 1;
     octx.stroke();
 
-    // Head
     octx.beginPath();
     octx.arc(0, -18, 4, 0, Math.PI * 2);
     octx.fillStyle = 'rgba(34, 197, 94, 0.9)';
     octx.fill();
     octx.stroke();
 
-    // Legs
     octx.beginPath();
     octx.arc(-12, -6, 3, 0, Math.PI * 2);
     octx.arc(12, -6, 3, 0, Math.PI * 2);
@@ -75,7 +75,6 @@ function makeTurtle(drawCanvas, overlayCanvas) {
     octx.fillStyle = 'rgba(34, 197, 94, 0.85)';
     octx.fill();
 
-    // Tail
     octx.beginPath();
     octx.moveTo(0, 14);
     octx.lineTo(0, 20);
@@ -99,9 +98,11 @@ function makeTurtle(drawCanvas, overlayCanvas) {
 
   function resetState() {
     x = drawCanvas.width / 2;
-    y = drawCanvas.width / 2;
+    y = drawCanvas.height / 2;
     heading = 0;
     pen = true;
+    penColor = 'black';
+    ctx.strokeStyle = penColor;
     drawTurtleIcon();
   }
 
@@ -144,6 +145,10 @@ function makeTurtle(drawCanvas, overlayCanvas) {
     setheading(a) {
       heading = Number(a) % 360;
       drawTurtleIcon();
+    },
+    setcolor(color) {
+      penColor = String(color);
+      ctx.strokeStyle = penColor;
     },
     clear() {
       paintWhiteBackground();
@@ -217,6 +222,9 @@ function makeQueuedTurtle(turtle, player) {
     setheading(a) {
       player.enqueue(() => turtle.setheading(a));
     },
+    setcolor(color) {
+      player.enqueue(() => turtle.setcolor(color));
+    },
     clear() {
       player.enqueue(() => turtle.clear());
     },
@@ -262,7 +270,7 @@ function parsePythonToSteps(pyText) {
   const steps = [];
 
   const turtleCallRe = new RegExp(
-    `^(?:${alias}|turtle|turtlejs|t)\\.(forward|backward|left|right|penup|pendown|goto|setx|sety|setheading)\\((.*)\\)\\s*$`
+    `^(?:${alias}|turtle|turtlejs|t)\\.(forward|backward|left|right|penup|pendown|goto|setx|sety|setheading|setcolor)\\((.*)\\)\\s*$`
   );
 
   const printRe = /^print\((.*)\)\s*$/;
@@ -586,6 +594,7 @@ function stepsToWorkspaceJson(steps, posById = {}) {
         setheading: 'turtle_setheading',
         penup: 'turtle_penup',
         pendown: 'turtle_pendown',
+        setcolor: 'turtle_setcolor',
       };
 
       const type = TYPE[step.fn];
@@ -615,6 +624,10 @@ function stepsToWorkspaceJson(steps, posById = {}) {
         block.inputs.X = numberShadow(step.args[0] ?? 0);
       } else if (step.fn === 'sety') {
         block.inputs.Y = numberShadow(step.args[0] ?? 0);
+      } else if (step.fn === 'setcolor') {
+        block.inputs.COLOR = textShadow(
+          (step.args[0] ?? '').replace(/^['"]|['"]$/g, '')
+        );
       }
 
       append(block);
