@@ -18,25 +18,6 @@ export const toolbox = {
   contents: [
     {
       kind: 'category',
-      name: 'Shapes',
-      colour: '#8b5cf6',
-      contents: [
-        {
-          kind: 'block',
-          type: 'shape_square',
-          inputs: {
-            SIZE: {
-              shadow: {
-                type: 'math_number',
-                fields: { NUM: 50 },
-              },
-            },
-          },
-        },
-      ],
-    },
-    {
-      kind: 'category',
       name: 'Logic',
       categorystyle: 'logic_category',
       contents: [
@@ -341,7 +322,25 @@ export const toolbox = {
         },
       ],
     },
-
+    {
+      kind: 'category',
+      name: 'Shapes',
+      colour: '#8b5cf6',
+      contents: [
+        {
+          kind: 'block',
+          type: 'shape_square',
+          inputs: {
+            SIZE: {
+              shadow: {
+                type: 'math_number',
+                fields: { NUM: 50 },
+              },
+            },
+          },
+        },
+      ],
+    },
     {
       kind: 'category',
       name: 'Turtle',
@@ -403,6 +402,18 @@ export const toolbox = {
           type: 'turtle_setheading',
           inputs: {
             ANGLE: { shadow: { type: 'math_number', fields: { NUM: 270 } } },
+          },
+        },
+        {
+          kind: 'block',
+          type: 'turtle_setcolor',
+          inputs: {
+            COLOR: {
+              shadow: {
+                type: 'text',
+                fields: { TEXT: 'red' },
+              },
+            },
           },
         },
         { kind: 'block', type: 'turtle_pendown' },
