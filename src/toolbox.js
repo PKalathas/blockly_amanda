@@ -339,6 +339,48 @@ export const toolbox = {
             },
           },
         },
+        {
+          kind: 'block',
+          type: 'shape_triangle',
+          inputs: {
+            SIZE: {
+              shadow: {
+                type: 'math_number',
+                fields: { NUM: 50 },
+              },
+            },
+          },
+        },
+        {
+          kind: 'block',
+          type: 'shape_rectangle',
+          inputs: {
+            WIDTH: {
+              shadow: {
+                type: 'math_number',
+                fields: { NUM: 80 },
+              },
+            },
+            HEIGHT: {
+              shadow: {
+                type: 'math_number',
+                fields: { NUM: 50 },
+              },
+            },
+          },
+        },
+        {
+          kind: 'block',
+          type: 'shape_pentagon',
+          inputs: {
+            SIZE: {
+              shadow: {
+                type: 'math_number',
+                fields: { NUM: 50 },
+              },
+            },
+          },
+        },
       ],
     },
     {

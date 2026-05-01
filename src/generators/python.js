@@ -19,6 +19,30 @@ pythonGenerator.forBlock['shape_square'] = function (block, generator) {
   return `for _ in range(4):\n    t.forward(${size})\n    t.right(90)\n`;
 };
 
+pythonGenerator.forBlock['shape_triangle'] = function (block, generator) {
+  const size =
+    generator.valueToCode(block, 'SIZE', pythonGenerator.ORDER_NONE) || '50';
+
+  return `for _ in range(3):\n    t.forward(${size})\n    t.right(120)\n`;
+};
+
+pythonGenerator.forBlock['shape_rectangle'] = function (block, generator) {
+  const width =
+    generator.valueToCode(block, 'WIDTH', pythonGenerator.ORDER_NONE) || '80';
+
+  const height =
+    generator.valueToCode(block, 'HEIGHT', pythonGenerator.ORDER_NONE) || '50';
+
+  return `for _ in range(2):\n    t.forward(${width})\n    t.right(90)\n    t.forward(${height})\n    t.right(90)\n`;
+};
+
+pythonGenerator.forBlock['shape_pentagon'] = function (block, generator) {
+  const size =
+    generator.valueToCode(block, 'SIZE', pythonGenerator.ORDER_NONE) || '50';
+
+  return `for _ in range(5):\n    t.forward(${size})\n    t.right(72)\n`;
+};
+
 pythonGenerator.forBlock['turtle_setcolor'] = function (block, generator) {
   const color =
     generator.valueToCode(block, 'COLOR', pythonGenerator.ORDER_NONE) || "'black'";
