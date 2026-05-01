@@ -12,6 +12,13 @@ pythonGenerator.forBlock['python_raw'] = function (block) {
   return code.endsWith('\n') ? code : `${code}\n`;
 };
 
+pythonGenerator.forBlock['shape_circle'] = function (block, generator) {
+  const r =
+    generator.valueToCode(block, 'RADIUS', pythonGenerator.ORDER_NONE) || '50';
+
+  return `for _ in range(36):\n    t.forward(${r} * 0.174)\n    t.right(10)\n`;
+};
+
 pythonGenerator.forBlock['shape_square'] = function (block, generator) {
   const size =
     generator.valueToCode(block, 'SIZE', pythonGenerator.ORDER_NONE) || '50';
@@ -41,6 +48,20 @@ pythonGenerator.forBlock['shape_pentagon'] = function (block, generator) {
     generator.valueToCode(block, 'SIZE', pythonGenerator.ORDER_NONE) || '50';
 
   return `for _ in range(5):\n    t.forward(${size})\n    t.right(72)\n`;
+};
+
+pythonGenerator.forBlock['shape_hexagon'] = function (block, generator) {
+  const size =
+    generator.valueToCode(block, 'SIZE', pythonGenerator.ORDER_NONE) || '50';
+
+  return `for _ in range(6):\n    t.forward(${size})\n    t.right(60)\n`;
+};
+
+pythonGenerator.forBlock['shape_heptagon'] = function (block, generator) {
+  const size =
+    generator.valueToCode(block, 'SIZE', pythonGenerator.ORDER_NONE) || '50';
+
+  return `for _ in range(7):\n    t.forward(${size})\n    t.right(51.43)\n`;
 };
 
 pythonGenerator.forBlock['turtle_setcolor'] = function (block, generator) {
@@ -99,6 +120,13 @@ pythonGenerator.forBlock['turtle_sety'] = function (block, generator) {
   const y =
     generator.valueToCode(block, 'Y', pythonGenerator.ORDER_NONE) || '0';
   return `t.sety(${y})\n`;
+};
+
+pythonGenerator.forBlock['turtle_setpensize'] = function (block, generator) {
+  const size =
+    generator.valueToCode(block, 'SIZE', pythonGenerator.ORDER_NONE) || '2';
+
+  return `t.setpensize(${size})\n`;
 };
 
 pythonGenerator.forBlock['turtle_setheading'] = function (block, generator) {

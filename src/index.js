@@ -24,12 +24,14 @@ function makeTurtle(drawCanvas, overlayCanvas) {
   function paintWhiteBackground() {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = 'white';
+    ctx.fillStyle = 'white'; // ✅ stays white (no black canvas change)
     ctx.fillRect(0, 0, drawCanvas.width, drawCanvas.height);
     ctx.restore();
   }
 
-  ctx.lineWidth = 2;
+  // pen thickness
+  let penSize = 2;
+  ctx.lineWidth = penSize;
   ctx.lineCap = 'round';
 
   let penColor = 'black';
@@ -37,7 +39,7 @@ function makeTurtle(drawCanvas, overlayCanvas) {
 
   let x = drawCanvas.width / 2;
   let y = drawCanvas.height / 2;
-  let heading = 0; // degrees, 0 = east/right
+  let heading = 0;
   let pen = true;
 
   const rad = (d) => (d * Math.PI) / 180;
@@ -101,8 +103,14 @@ function makeTurtle(drawCanvas, overlayCanvas) {
     y = drawCanvas.height / 2;
     heading = 0;
     pen = true;
+
     penColor = 'black';
     ctx.strokeStyle = penColor;
+
+    // reset pen size
+    penSize = 2;
+    ctx.lineWidth = penSize;
+
     drawTurtleIcon();
   }
 
@@ -149,6 +157,10 @@ function makeTurtle(drawCanvas, overlayCanvas) {
     setcolor(color) {
       penColor = String(color);
       ctx.strokeStyle = penColor;
+    },
+    setpensize(size) {
+      penSize = Number(size);
+      ctx.lineWidth = penSize;
     },
     clear() {
       paintWhiteBackground();
@@ -225,6 +237,9 @@ function makeQueuedTurtle(turtle, player) {
     setcolor(color) {
       player.enqueue(() => turtle.setcolor(color));
     },
+    setpensize(size) {
+      player.enqueue(() => turtle.setpensize(size));
+    },
     clear() {
       player.enqueue(() => turtle.clear());
     },
@@ -270,7 +285,7 @@ function parsePythonToSteps(pyText) {
   const steps = [];
 
   const turtleCallRe = new RegExp(
-    `^(?:${alias}|turtle|turtlejs|t)\\.(forward|backward|left|right|penup|pendown|goto|setx|sety|setheading|setcolor)\\((.*)\\)\\s*$`
+    `^(?:${alias}|turtle|turtlejs|t)\\.(forward|backward|left|right|penup|pendown|goto|setx|sety|setheading|setcolor|setpensize)\\((.*)\\)\\s*$`
   );
 
   const printRe = /^print\((.*)\)\s*$/;
@@ -595,6 +610,7 @@ function stepsToWorkspaceJson(steps, posById = {}) {
         penup: 'turtle_penup',
         pendown: 'turtle_pendown',
         setcolor: 'turtle_setcolor',
+        setpensize: 'turtle_setpensize',
       };
 
       const type = TYPE[step.fn];
@@ -628,6 +644,8 @@ function stepsToWorkspaceJson(steps, posById = {}) {
         block.inputs.COLOR = textShadow(
           (step.args[0] ?? '').replace(/^['"]|['"]$/g, '')
         );
+      } else if (step.fn === 'setpensize') {
+        block.inputs.SIZE = numberShadow(step.args[0] ?? 2);
       }
 
       append(block);

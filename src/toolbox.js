@@ -329,6 +329,15 @@ export const toolbox = {
       contents: [
         {
           kind: 'block',
+          type: 'shape_circle',
+          inputs: {
+            RADIUS: {
+              shadow: { type: 'math_number', fields: { NUM: 50 } },
+            },
+          },
+        },
+        {
+          kind: 'block',
           type: 'shape_square',
           inputs: {
             SIZE: {
@@ -378,6 +387,24 @@ export const toolbox = {
                 type: 'math_number',
                 fields: { NUM: 50 },
               },
+            },
+          },
+        },
+        {
+          kind: 'block',
+          type: 'shape_hexagon',
+          inputs: {
+            SIZE: {
+              shadow: { type: 'math_number', fields: { NUM: 50 } },
+            },
+          },
+        },
+        {
+          kind: 'block',
+          type: 'shape_heptagon',
+          inputs: {
+            SIZE: {
+              shadow: { type: 'math_number', fields: { NUM: 50 } },
             },
           },
         },
@@ -460,6 +487,18 @@ export const toolbox = {
         },
         { kind: 'block', type: 'turtle_pendown' },
         { kind: 'block', type: 'turtle_penup' },
+        {
+          kind: 'block',
+          type: 'turtle_setpensize',
+          inputs: {
+            SIZE: {
+              shadow: {
+                type: 'math_number',
+                fields: { NUM: 3 },
+              },
+            },
+          },
+        },
       ],
     },
   ],

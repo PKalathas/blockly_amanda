@@ -2,6 +2,14 @@ import * as Blockly from 'blockly';
 
 Blockly.defineBlocksWithJsonArray([
     {
+        type: 'shape_circle',
+        message0: 'draw circle radius %1',
+        args0: [{ type: 'input_value', name: 'RADIUS', check: 'Number' }],
+        previousStatement: null,
+        nextStatement: null,
+        colour: 210,
+    },
+    {
         type: 'shape_square',
         message0: 'draw square with size %1',
         args0: [
@@ -37,6 +45,22 @@ Blockly.defineBlocksWithJsonArray([
     {
         type: 'shape_pentagon',
         message0: 'draw pentagon with size %1',
+        args0: [{ type: 'input_value', name: 'SIZE', check: 'Number' }],
+        previousStatement: null,
+        nextStatement: null,
+        colour: 210,
+    },
+    {
+        type: 'shape_hexagon',
+        message0: 'draw hexagon size %1',
+        args0: [{ type: 'input_value', name: 'SIZE', check: 'Number' }],
+        previousStatement: null,
+        nextStatement: null,
+        colour: 210,
+    },
+    {
+        type: 'shape_heptagon',
+        message0: 'draw heptagon size %1',
         args0: [{ type: 'input_value', name: 'SIZE', check: 'Number' }],
         previousStatement: null,
         nextStatement: null,

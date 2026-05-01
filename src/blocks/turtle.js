@@ -139,6 +139,16 @@ const definitions = Blockly.common.createBlockDefinitionsFromJsonArray([
         nextStatement: null,
         colour: TURTLE_COLOR,
     },
+    {
+        type: 'turtle_setpensize',
+        message0: 'set pen size to %1',
+        args0: [
+            { type: 'input_value', name: 'SIZE', check: 'Number' }
+        ],
+        previousStatement: null,
+        nextStatement: null,
+        colour: TURTLE_COLOR,
+    },
 ]);
 
 // Register the definition
