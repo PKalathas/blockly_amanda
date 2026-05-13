@@ -64,6 +64,12 @@ pythonGenerator.forBlock['shape_heptagon'] = function (block, generator) {
   return `for _ in range(7):\n    t.forward(${size})\n    t.right(51.43)\n`;
 };
 
+pythonGenerator.forBlock['turtle_start'] = function (block, generator) {
+  const statements = generator.statementToCode(block, 'DO');
+
+  return `import turtlejs as t\n${statements}`;
+};
+
 pythonGenerator.forBlock['turtle_setcolor'] = function (block, generator) {
   const color =
     generator.valueToCode(block, 'COLOR', pythonGenerator.ORDER_NONE) || "'black'";
@@ -152,11 +158,14 @@ pythonGenerator.finish = function (code) {
   const allCode = [...definitions, code].filter(Boolean).join('\n');
 
   const needsTurtle =
-    /\bt\.(forward|backward|left|right|penup|pendown|goto|setx|sety|setheading|setcolor)\(/.test(
+    /\bt\.(forward|backward|left|right|penup|pendown|goto|setx|sety|setheading|setcolor|setpensize)\(/.test(
       allCode
     );
 
-  const prefix = needsTurtle ? 'import turtlejs as t\n' : '';
+  const prefix =
+    needsTurtle && !allCode.includes('import turtlejs as t')
+      ? 'import turtlejs as t\n'
+      : '';
   return `${prefix}${allCode}`.replace(/\n{3,}/g, '\n\n').trim() + '\n';
 };
 
