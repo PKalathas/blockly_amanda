@@ -12,18 +12,29 @@
   "keywords": [
     "blockly"
   ],
-  "author": "",
+"author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "css-loader": "^6.7.1",
-    "html-webpack-plugin": "^5.5.0",
-    "source-map-loader": "^4.0.1",
-    "style-loader": "^3.3.1",
-    "webpack": "^5.76.0",
-    "webpack-cli": "^4.10.0",
-    "webpack-dev-server": "^4.11.1"
+    "css-loader": "^7.1.4",
+    "html-webpack-plugin": "^5.6.7",
+    "source-map-loader": "^5.0.0",
+    "style-loader": "^4.0.0",
+    "webpack": "^5.107.2",
+    "webpack-cli": "^7.0.0",
+    "webpack-dev-server": "^5.2.5"
   },
   "dependencies": {
-    "blockly": "^11.2.2"
+    "blockly": "^13.0.0",
+    "http-proxy-middleware": "^4.1.1",
+    "sockjs": "^0.3.24",
+    "uuid": "^14.0.0"
+  },
+  "overrides": {
+    "webpack-dev-server": {
+		"http-proxy-middleware": "4.1.1"
+	},
+    "sockjs": {
+		"uuid": "^14.0.0"
+	}
   }
 }
